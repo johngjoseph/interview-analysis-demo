@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Scraper Testing - RecOps</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style> .htmx-request.btn { opacity: 0.5; cursor: wait; } </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <nav class="bg-white border-b h-16 flex items-center justify-between px-8">
+        <a href="/dashboard" class="text-xl font-bold text-slate-800">RecOps <span class="text-blue-600">AI</span></a>
+        <div class="flex gap-4 text-sm">
+            <a href="/dashboard" class="text-gray-500 hover:text-blue-600">Dashboard</a>
+            <a href="/settings" class="text-gray-500 hover:text-blue-600">Settings</a>
+            <span class="font-bold text-blue-600">Test Scraper</span>
+            <a href="/logout" class="text-red-500">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto mt-8 px-4 pb-10">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">Scraper Testing & Validation</h1>
+
+        <!-- FULL WORKFLOW TEST -->
+        <div class="bg-white rounded-xl shadow p-6 mb-8 border border-gray-200">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Full Workflow Test
+            </h2>
+            <p class="text-sm text-gray-600 mb-4">Test the complete scraping workflow: discover links and extract salaries.</p>
+            
+            <form hx-post="/test-scraper/run" hx-target="#full-workflow-results" hx-swap="innerHTML" class="flex gap-4 items-end mb-4">
+                <div class="flex-grow">
+                    <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Company URL</label>
+                    <select name="company_url" class="w-full border p-2 rounded h-10">
+                        <option value="" disabled selected>Select from saved targets...</option>
+                        {% for t in targets %}
+                        <option value="{{ t.career_url }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="w-1/3">
+                    <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Role Keyword</label>
+                    <input type="text" name="role_keyword" placeholder="e.g. Engineer" class="w-full border p-2 rounded h-10" required>
+                </div>
+                <button type="submit" class="btn bg-blue-600 text-white font-bold py-2 px-6 rounded h-10">Run Full Test</button>
+            </form>
+            
+            <div id="full-workflow-results"></div>
+        </div>
+
+        <!-- STEP-BY-STEP TESTING -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- LINK DISCOVERY TEST -->
+            <div class="bg-white rounded-xl shadow p-6 border border-gray-200">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                    Link Discovery Test
+                </h2>
+                <p class="text-xs text-gray-500 mb-4">Test link discovery separately. See all links before and after AI filtering.</p>
+                
+                <form hx-post="/test-scraper/discover" hx-target="#discover-results" hx-swap="innerHTML" class="space-y-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Company URL</label>
+                        <input type="url" name="company_url" placeholder="https://..." class="w-full border p-2 rounded text-sm" required>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Role Keyword</label>
+                        <input type="text" name="role_keyword" placeholder="e.g. Engineer" class="w-full border p-2 rounded text-sm" required>
+                    </div>
+                    <button type="submit" class="w-full btn bg-purple-600 text-white font-bold py-2 rounded text-sm">Test Discovery</button>
+                </form>
+                
+                <div id="discover-results" class="mt-4"></div>
+            </div>
+
+            <!-- INDIVIDUAL URL EXTRACTION TEST -->
+            <div class="bg-white rounded-xl shadow p-6 border border-gray-200">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    Individual URL Extraction Test
+                </h2>
+                <p class="text-xs text-gray-500 mb-4">Test salary extraction from a single job posting URL.</p>
+                
+                <form hx-post="/test-scraper/extract" hx-target="#extract-results" hx-swap="innerHTML" class="space-y-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Job Posting URL</label>
+                        <input type="url" name="test_url" placeholder="https://..." class="w-full border p-2 rounded text-sm" required>
+                    </div>
+                    <button type="submit" class="w-full btn bg-green-600 text-white font-bold py-2 rounded text-sm">Test Extraction</button>
+                </form>
+                
+                <div id="extract-results" class="mt-4"></div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
+

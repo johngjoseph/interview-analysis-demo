@@ -1,0 +1,74 @@
+Project Context: TalentScout Intelligence
+
+High-Level Goal: Transforming a raw web scraper into an Offer Intelligence Platform for recruiters. The system moves beyond just collecting data to helping recruiters create, visualize, and save competitive offer benchmarks for candidates.
+
+
+Core Entities:
+
+Market Data (MarketData): The "Supply." A repository of salary data points (Company, Role, Level, Salary) populated by a background scraper (Jina/Crawl4AI).
+
+Offer Analysis (OfferAnalysis): The "Demand." A persistent report created by a recruiter for a specific candidate. It links a proposed offer to a specific subset of MarketData points (e.g., "Compare this offer to Google and Meta Senior Engineers").
+
+Architecture:
+
+Backend: Flask + SQLAlchemy (SQLite/Postgres).
+
+Frontend: Single Page Application (SPA) served via a single Flask template (index.html).
+
+Data Flow:
+
+Read: The / route injects all market data and recent analyses directly into the template as JSON for instant client-side interaction (Alpine.js).
+
+Write: The /api/save endpoint handles creating and updating analysis reports via JSON/AJAX.
+
+Ingest: The /api/seed endpoint (placeholder for the scraper) populates the benchmark pool.
+
+User Workflow:
+
+Admin: Runs the scraper to ensure the MarketData table is fresh.
+
+Recruiter: Opens the Dashboard to see recent reports.
+
+Recruiter: Creates a "New Analysis," inputs candidate details, filters the MarketData pool to find relevant peers, and saves the comparison to justify the offer.
+
+Changes
+
+
+
+1. Frontend: One New File
+You are moving from a multi-page static site to a Single Page App (SPA) served by Flask.
+
+Action: Create templates/index.html.
+
+Content: Paste the code from the Talent Scout Frontend file above.
+
+Note: This single file handles the Dashboard, Admin, and Analysis views dynamically using Alpine.js. You can likely archive your old templates (like results.html or home.html).
+
+2. Database: Add Two Models
+You need to store the "Pool" of market data and the specific "Reports" recruiters create.
+
+Action: Add these two classes to your models.py (or app.py):
+
+MarketData: Stores the raw salary rows (Company, Role, Salary).
+
+OfferAnalysis: Stores the user's report (Candidate Name, Proposed Salary, Notes, and a list of selected MarketData IDs).
+
+3. Backend Routes: Add & Update
+You need to wire up the data to the new frontend.
+
+Update @app.route('/'):
+
+Instead of just rendering a static page, it must now fetch all MarketData and OfferAnalysis records.
+
+Pass them to the template as JSON: render_template('index.html', market_data=..., analyses=...).
+
+Add @app.route('/api/save'):
+
+A new endpoint to handle JSON POST requests when a recruiter clicks "Save". It creates or updates an OfferAnalysis record.
+
+4. Integration: Connect Your Existing Scraper
+Action: In the /api/seed route (or your nightly task), do not use my random data generator.
+
+Instead: Call your existing ScraperService.run() (or whatever you named it) to fetch real data, and save that into the MarketData table.
+
+Benefit: This keeps your robust backend logic (Jina/Crawl4AI) completely separated from the new UI. The UI just reads whatever is in the database.

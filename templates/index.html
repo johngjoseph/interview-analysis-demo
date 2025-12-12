@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TalentScout Intelligence</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Phosphor Icons (for the React Lucide look) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+        .fade-enter, .fade-leave-to { opacity: 0; }
+    </style>
+    <!-- Alpine.js Data Registration (must be before Alpine.js loads) -->
+    <script>
+        // Register Alpine data BEFORE Alpine.js initializes
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('app', () => ({
+                // --- State ---
+                view: 'dashboard', // dashboard, admin, analysis
+                builderTab: 'setup', // setup, select, report
+                seeding: false,
+                saving: false,
+                search: '',
+                useMockData: true, // Toggle between mock and real scraper
+                marketData: {{ market_data | tojson | safe }}, // Injected from Flask
+                analyses: {{ analyses | tojson | safe }},      // Injected from Flask
+                
+                // Active Analysis Object
+                currentAnalysis: null,
+                chartInstance: null,
+
+                // --- Methods ---
+
+                createNewAnalysis() {
+                    this.currentAnalysis = {
+                        id: null, // Will be assigned by backend on first save
+                        title: 'New Analysis',
+                        candidateName: '',
+                        targetRole: '',
+                        proposedSalary: 0,
+                        status: 'Draft',
+                        notes: '',
+                        selectedIds: [],
+                        updatedAt: 'Now'
+                    };
+                    this.view = 'analysis';
+                    this.builderTab = 'setup';
+                },
+
+                openAnalysis(analysis) {
+                    // Clone to avoid mutating the list directly until saved
+                    this.currentAnalysis = JSON.parse(JSON.stringify(analysis));
+                    this.view = 'analysis';
+                    this.builderTab = 'setup';
+                },
+
+                save() {
+                    if (!this.currentAnalysis) return;
+                    this.saving = true;
+                    fetch('/api/save', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(this.currentAnalysis)
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!this.currentAnalysis) return;
+                        this.currentAnalysis.id = data.id;
+                        this.currentAnalysis.updatedAt = data.updatedAt;
+                        
+                        // Update local list
+                        const idx = this.analyses.findIndex(a => a.id === data.id);
+                        if (idx >= 0) {
+                            this.analyses[idx] = this.currentAnalysis;
+                        } else {
+                            this.analyses.unshift(this.currentAnalysis);
+                        }
+                        
+                        setTimeout(() => { this.saving = false; }, 500);
+                    })
+                    .catch(err => {
+                        console.error('Save error:', err);
+                        this.saving = false;
+                    });
+                },
+
+                seedData() {
+                    this.seeding = true;
+                    fetch('/api/seed', { 
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ mock: this.useMockData })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert('Error: ' + data.error);
+                            this.seeding = false;
+                        } else {
+                            alert(`Successfully added ${data.count} ${data.mode === 'mock' ? 'mock' : 'scraped'} records!`);
+                            window.location.reload(); // Reload to get new data
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Seed error:', err);
+                        alert('Error: ' + err.message);
+                        this.seeding = false;
+                    });
+                },
+
+                toggleSelection(id) {
+                    if (!this.currentAnalysis) return;
+                    if (this.currentAnalysis.selectedIds.includes(id)) {
+                        this.currentAnalysis.selectedIds = this.currentAnalysis.selectedIds.filter(x => x !== id);
+                    } else {
+                        this.currentAnalysis.selectedIds.push(id);
+                    }
+                    this.save();
+                },
+
+                // --- Computed ---
+
+                get filteredMarketData() {
+                    if (!this.search) return this.marketData;
+                    const q = this.search.toLowerCase();
+                    return this.marketData.filter(i => 
+                        i.company.toLowerCase().includes(q) || i.role.toLowerCase().includes(q)
+                    );
+                },
+
+                get stats() {
+                    if (!this.currentAnalysis || !this.currentAnalysis.selectedIds) return { median: 0, p75: 0 };
+                    const selected = this.marketData.filter(m => this.currentAnalysis.selectedIds.includes(m.id));
+                    if (selected.length === 0) return { median: 0, p75: 0 };
+                    
+                    const salaries = selected.map(s => s.salary).sort((a,b) => a-b);
+                    const mid = Math.floor(salaries.length / 2);
+                    const median = salaries.length % 2 !== 0 ? salaries[mid] : (salaries[mid - 1] + salaries[mid]) / 2;
+                    const p75 = salaries[Math.floor(salaries.length * 0.75)];
+                    
+                    return { median, p75 };
+                },
+
+                renderChart() {
+                    if (!this.currentAnalysis) return;
+                    if (this.chartInstance) this.chartInstance.destroy();
+                    
+                    // Small delay to ensure DOM is ready
+                    setTimeout(() => {
+                        const ctx = document.getElementById('compChart');
+                        if (!ctx) return;
+
+                        this.chartInstance = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: ['Market P50', 'Market P75', 'Your Offer'],
+                                datasets: [{
+                                    label: 'Salary',
+                                    data: [this.stats.median, this.stats.p75, this.currentAnalysis.proposedSalary || 0],
+                                    backgroundColor: ['#94a3b8', '#64748b', '#4f46e5'],
+                                    borderRadius: 6
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: { y: { beginAtZero: true } }
+                            }
+                        });
+                    }, 50);
+                }
+            }));
+        });
+    </script>
+    <!-- Alpine.js (load after data registration) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans h-screen flex flex-col" x-data="app()">
+
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-gray-200 px-6 h-16 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3 cursor-pointer" @click="view = 'dashboard'">
+            <div class="bg-indigo-600 text-white p-1.5 rounded-lg">
+                <i class="ph-bold ph-briefcase text-xl"></i>
+            </div>
+            <span class="font-bold text-xl text-gray-900">TalentScout</span>
+        </div>
+        
+        <div class="flex items-center gap-6">
+            <button @click="view = 'dashboard'" :class="view === 'dashboard' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'" class="text-sm font-medium transition-colors">Dashboard</button>
+            <button @click="view = 'admin'" :class="view === 'admin' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'" class="text-sm font-medium transition-colors">Admin & Data</button>
+            <a href="/settings" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">Settings</a>
+            <a href="/test-scraper" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">Test Scraper</a>
+            <a href="/logout" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">Logout</a>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-auto p-6 max-w-7xl mx-auto w-full">
+        
+        <!-- VIEW: DASHBOARD -->
+        <div x-show="view === 'dashboard'" x-transition.opacity>
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Welcome back, Recruiter</h1>
+                    <p class="text-gray-500">Manage your active offers and compensation benchmarks.</p>
+                </div>
+                <button @click="createNewAnalysis()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+                    <i class="ph-bold ph-plus"></i> New Analysis
+                </button>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="ph-bold ph-file-text text-xl"></i></div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Active Analyses</p>
+                        <p class="text-2xl font-bold text-gray-900" x-text="analyses.length"></p>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i class="ph-bold ph-database text-xl"></i></div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Market Data Points</p>
+                        <p class="text-2xl font-bold text-gray-900" x-text="marketData.length"></p>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-purple-50 text-purple-600 rounded-lg"><i class="ph-bold ph-trend-up text-xl"></i></div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Market Trend</p>
+                        <p class="text-2xl font-bold text-gray-900">+4.2%</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- List -->
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="font-semibold text-gray-900">Recent Analyses</h3>
+                </div>
+                <ul class="divide-y divide-gray-200">
+                    <template x-for="item in analyses" :key="item.id">
+                        <li @click="openAnalysis(item)" class="px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors flex justify-between items-center">
+                            <div>
+                                <p class="font-medium text-indigo-600" x-text="item.candidateName || 'Untitled Candidate'"></p>
+                                <p class="text-sm text-gray-500">
+                                    <span x-text="item.targetRole || 'Role not set'"></span> • <span x-text="item.updatedAt"></span>
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium" 
+                                      :class="item.status === 'Final' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                                      x-text="item.status"></span>
+                                <i class="ph-bold ph-caret-right text-gray-400"></i>
+                            </div>
+                        </li>
+                    </template>
+                    <li x-show="analyses.length === 0" class="px-6 py-12 text-center text-gray-500">
+                        No analyses yet. Start a new one!
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- VIEW: ADMIN -->
+        <div x-show="view === 'admin'" x-cloak>
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">System Admin</h1>
+            <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-6">
+                <h2 class="text-lg font-semibold mb-2">Data Pipeline</h2>
+                <p class="text-gray-600 mb-4">
+                    Choose between generating mock data (instant) or running the real scraper (uses Jina Reader to fetch job postings).
+                </p>
+                <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
+                    <i class="ph-bold ph-database text-gray-400 text-2xl"></i>
+                    <div class="flex-1">
+                        <p class="font-medium">Market Data Collection</p>
+                        <p class="text-sm text-gray-500"><span x-text="marketData.length"></span> records found</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" x-model="useMockData" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                            <span class="text-sm text-gray-700">Use Mock Data</span>
+                        </label>
+                        <button @click="seedData()" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                            <i class="ph-bold ph-arrows-clockwise" :class="{'animate-spin': seeding}"></i>
+                            <span x-text="seeding ? 'Running...' : (useMockData ? 'Generate Mock Data' : 'Run Scraper')"></span>
+                        </button>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800 mb-1">💡 Tip:</p>
+                    <p><strong>Mock Data:</strong> Instantly generates 50 realistic records for testing (OpenAI, Anthropic, Google, Meta, GitHub, Replit, Vercel, Stripe, Datadog)</p>
+                    <p class="mt-1"><strong>Real Scraper:</strong> Uses Jina Reader to fetch actual job postings from configured target companies. Requires target companies in Settings.</p>
+                </div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <h2 class="text-lg font-semibold mb-4">Admin Tools</h2>
+                <div class="space-y-2">
+                    <a href="/settings" class="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <i class="ph-bold ph-gear text-gray-600"></i>
+                            <span class="font-medium">Configure Target Companies</span>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">Manage companies to scrape for market data</p>
+                    </a>
+                    <a href="/test-scraper" class="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <i class="ph-bold ph-bug text-gray-600"></i>
+                            <span class="font-medium">Test Scraper</span>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">Test and validate the scraping workflow</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: ANALYSIS BUILDER -->
+        <div x-show="view === 'analysis' && currentAnalysis" x-cloak class="space-y-6">
+            <!-- Builder Header -->
+            <div class="flex items-center justify-between pb-4 border-b border-gray-200">
+                <div class="flex items-center gap-4">
+                    <button @click="view = 'dashboard'" class="text-gray-500 hover:text-gray-900">← Back</button>
+                    <div>
+                        <input x-bind:value="currentAnalysis ? currentAnalysis.title : ''" x-on:input="if (currentAnalysis) currentAnalysis.title = $event.target.value; save()" type="text" class="text-xl font-bold bg-transparent border-none focus:ring-0 placeholder-gray-400 p-0" placeholder="Analysis Title">
+                        <p class="text-xs text-gray-500" x-show="saving">Saving...</p>
+                        <p class="text-xs text-gray-500" x-show="!saving">All changes saved</p>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="save()" class="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50">Save Draft</button>
+                    <button @click="builderTab = 'report'; renderChart()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">View Report</button>
+                </div>
+            </div>
+
+            <!-- Builder Tabs -->
+            <div class="flex space-x-1 rounded-xl bg-gray-200 p-1 w-fit">
+                <button @click="builderTab = 'setup'" :class="builderTab === 'setup' ? 'bg-white shadow text-indigo-700' : 'text-gray-600'" class="w-32 py-2 rounded-lg text-sm font-medium transition-all">Setup</button>
+                <button @click="builderTab = 'select'" :class="builderTab === 'select' ? 'bg-white shadow text-indigo-700' : 'text-gray-600'" class="w-32 py-2 rounded-lg text-sm font-medium transition-all">Select Data</button>
+                <button @click="builderTab = 'report'; renderChart()" :class="builderTab === 'report' ? 'bg-white shadow text-indigo-700' : 'text-gray-600'" class="w-32 py-2 rounded-lg text-sm font-medium transition-all">Report</button>
+            </div>
+
+            <!-- Tab 1: Setup -->
+            <div x-show="builderTab === 'setup' && currentAnalysis" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                    <h3 class="font-semibold text-lg flex items-center gap-2"><i class="ph-bold ph-users"></i> Candidate Details</h3>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Candidate Name</label>
+                        <input x-bind:value="currentAnalysis ? currentAnalysis.candidateName : ''" x-on:input="if (currentAnalysis) currentAnalysis.candidateName = $event.target.value; save()" class="w-full mt-1 border border-gray-300 rounded-md p-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Target Role</label>
+                        <input x-bind:value="currentAnalysis ? currentAnalysis.targetRole : ''" x-on:input="if (currentAnalysis) currentAnalysis.targetRole = $event.target.value; save()" class="w-full mt-1 border border-gray-300 rounded-md p-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Proposed Base Salary ($)</label>
+                        <input x-bind:value="currentAnalysis ? currentAnalysis.proposedSalary : 0" x-on:input="if (currentAnalysis) currentAnalysis.proposedSalary = parseInt($event.target.value) || 0; save()" type="number" class="w-full mt-1 border border-gray-300 rounded-md p-2">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Select -->
+            <div x-show="builderTab === 'select' && currentAnalysis" class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <input x-model="search" type="text" placeholder="Search companies..." class="border border-gray-300 rounded-lg px-4 py-2 w-1/3">
+                    <div class="text-sm text-gray-600">Selected: <span class="font-bold" x-text="currentAnalysis ? currentAnalysis.selectedIds.length : 0"></span></div>
+                </div>
+                <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm max-h-[500px] overflow-y-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0 shadow-sm">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Select</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Salary</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="item in filteredMarketData" :key="item.id">
+                                <tr class="hover:bg-gray-50 cursor-pointer" 
+                                    :class="currentAnalysis && currentAnalysis.selectedIds.includes(item.id) ? 'bg-indigo-50' : ''"
+                                    @click="toggleSelection(item.id)">
+                                    <td class="px-6 py-4">
+                                        <div class="w-5 h-5 border-2 rounded-full flex items-center justify-center"
+                                             :class="currentAnalysis && currentAnalysis.selectedIds.includes(item.id) ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300'">
+                                            <span x-show="currentAnalysis && currentAnalysis.selectedIds.includes(item.id)" class="text-white text-xs">✓</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4" x-text="item.company"></td>
+                                    <td class="px-6 py-4" x-text="item.role"></td>
+                                    <td class="px-6 py-4 font-mono" x-text="'$' + item.salary.toLocaleString()"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 3: Report -->
+            <div x-show="builderTab === 'report' && currentAnalysis" class="space-y-6">
+                <div class="bg-white p-8 rounded-xl border-t-4 border-indigo-600 shadow-sm">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900" x-text="currentAnalysis ? currentAnalysis.title : 'New Analysis'"></h2>
+                            <p class="text-gray-500">Prepared for <span x-text="currentAnalysis ? currentAnalysis.candidateName : ''"></span></p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">Proposed Offer</p>
+                            <p class="text-3xl font-bold text-indigo-600" x-text="'$' + (currentAnalysis ? currentAnalysis.proposedSalary.toLocaleString() : '0')"></p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4 mb-8">
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Market P50</p>
+                            <p class="text-xl font-bold text-gray-900" x-text="'$' + stats.median.toLocaleString()"></p>
+                        </div>
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Market P75</p>
+                            <p class="text-xl font-bold text-gray-900" x-text="'$' + stats.p75.toLocaleString()"></p>
+                        </div>
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <p class="text-xs text-gray-500 uppercase font-semibold">Comparison</p>
+                            <p class="text-xl font-bold" 
+                               :class="currentAnalysis && currentAnalysis.proposedSalary >= stats.median ? 'text-green-600' : 'text-amber-600'"
+                               x-text="currentAnalysis && currentAnalysis.proposedSalary >= stats.median ? 'Competitive' : 'Below Market'"></p>
+                        </div>
+                    </div>
+
+                    <div class="h-64 w-full mb-6 relative">
+                        <canvas id="compChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</body>
+</html>
+

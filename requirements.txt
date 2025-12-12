@@ -1,0 +1,15 @@
+flask
+authlib
+requests
+flask_sqlalchemy
+psycopg2-binary
+pandas
+numpy
+textblob
+gunicorn
+openai
+langchain
+langchain-community
+langchain-openai
+beautifulsoup4
+python-dotenv

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>RecOps Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style> .htmx-request.btn { opacity: 0.5; cursor: wait; } </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-10">
+    <nav class="bg-white border-b h-16 flex items-center justify-between px-8">
+        <span class="text-xl font-bold text-slate-800">RecOps <span class="text-blue-600">AI</span></span>
+        <div class="flex gap-4 text-sm items-center">
+            <a href="/settings" class="text-gray-500 hover:text-blue-600 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Settings
+            </a>
+            <span class="text-gray-300">|</span>
+            <span>{{ user.name }}</span>
+            <a href="/logout" class="text-red-500">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto mt-8 px-4">
+        
+        <!-- OFFER SIMULATOR -->
+        <div class="bg-indigo-900 rounded-xl shadow-lg p-6 mb-8 text-white">
+            <h2 class="text-xl font-bold mb-4">Offer Simulator (Deal Desk)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label class="block text-xs font-bold text-indigo-300 uppercase mb-1">Proposed Salary</label>
+                    <input type="number" id="offerInput" value="210000" class="w-full text-slate-900 font-bold text-xl p-2 rounded" placeholder="0.00">
+                    <button onclick="recalcOffer()" class="mt-3 w-full bg-indigo-500 hover:bg-indigo-600 font-bold py-2 rounded">Analyze Strength</button>
+                </div>
+                <div class="md:col-span-2 bg-indigo-800 rounded-lg p-4 space-y-3">
+                    <h3 class="font-bold text-indigo-100 mb-2">Competitive Landscape</h3>
+                    {% for row in market.summary_table %}
+                    <div class="flex items-center text-sm">
+                        <div class="w-24 font-medium text-indigo-200">{{ row.company }}</div>
+                        <div class="flex-grow mx-3 relative h-4 bg-indigo-900 rounded-full overflow-hidden">
+                            <div class="absolute h-full bg-indigo-600 opacity-50 w-full"></div>
+                            <div id="marker-{{loop.index}}" class="absolute h-full w-1 bg-yellow-400 z-10 transition-all duration-500" style="left: 50%"></div>
+                        </div>
+                        <div class="w-32 text-right font-mono" id="label-{{loop.index}}">...</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- AGENT CRAWLER -->
+        <div class="bg-white rounded-xl shadow p-6 mb-8 border border-gray-200">
+            <h2 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Live Market Scout
+            </h2>
+            <form hx-post="/run-bulk-crawl" hx-target="#results" hx-swap="innerHTML" class="flex gap-4 items-end">
+                <div class="flex-grow">
+                    <label class="text-xs font-bold text-gray-500 uppercase">Target Company</label>
+                    <select name="company_url" id="companySelect" class="w-full border p-2 rounded h-10 mb-2">
+                        <option value="">Select from saved targets...</option>
+                        {% for t in targets %}
+                        <option value="{{ t.career_url }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="text-xs text-gray-500 mb-1">Or enter URL manually:</div>
+                    <input type="url" name="company_url" id="manualUrlInput" placeholder="e.g. https://boards.greenhouse.io/anthropic" class="w-full border p-2 rounded h-10">
+                </div>
+                <div class="w-1/3">
+                    <label class="text-xs font-bold text-gray-500 uppercase">Role Keyword</label>
+                    <input type="text" name="role_keyword" placeholder="e.g. Engineer" class="w-full border p-2 rounded h-10" required>
+                </div>
+                <button type="submit" class="btn bg-blue-600 text-white font-bold py-2 px-6 rounded h-10">Launch Scout</button>
+            </form>
+            <script>
+                // Use select value if provided, otherwise use manual input
+                document.querySelector('form').addEventListener('submit', function(e) {
+                    const select = document.getElementById('companySelect');
+                    const manualInput = document.getElementById('manualUrlInput');
+                    if (select.value) {
+                        manualInput.disabled = true;
+                    } else {
+                        select.disabled = true;
+                    }
+                });
+            </script>
+            <div id="results" class="mt-4"></div>
+        </div>
+
+        <!-- CAPACITY CHART -->
+        <div class="bg-white rounded-xl shadow p-6 border border-gray-200">
+            <h3 class="font-bold text-gray-800 mb-4">Q4 Capacity Forecast</h3>
+            <canvas id="capChart" height="80"></canvas>
+        </div>
+    </main>
+
+    <script>
+        // Offer Logic
+        function recalcOffer() {
+            const offer = parseInt(document.getElementById('offerInput').value);
+            const vizMin = 150000; const vizMax = 450000;
+            
+            {% for row in market.summary_table %}
+                let pct = ((offer - vizMin) / (vizMax - vizMin)) * 100;
+                document.getElementById(`marker-{{loop.index}}`).style.left = Math.max(0, Math.min(100, pct)) + '%';
+                
+                let el = document.getElementById(`label-{{loop.index}}`);
+                if (offer < {{row.min}}) el.innerHTML = `<span class='text-red-400 font-bold'>Lose (-$${Math.round(({{row.min}}-offer)/1000)}k)</span>`;
+                else if (offer > {{row.max}}) el.innerHTML = `<span class='text-green-400 font-bold'>Win (+$${Math.round((offer-{{row.max}})/1000)}k)</span>`;
+                else el.innerHTML = `<span class='text-yellow-400'>Competitive</span>`;
+            {% endfor %}
+        }
+        setTimeout(recalcOffer, 500);
+
+        // Chart Logic
+        new Chart(document.getElementById('capChart'), {
+            type: 'line',
+            data: {
+                labels: Array.from({length: 12}, (_, i) => `W${i+1}`),
+                datasets: [{
+                    label: 'Demand',
+                    data: {{ capacity.projected_demand | tojson }},
+                    borderColor: '#2563EB', tension: 0.4
+                }, {
+                    label: 'Limit',
+                    data: Array(12).fill({{ capacity.weekly_capacity }}),
+                    borderColor: '#DC2626', borderDash: [5, 5]
+                }]
+            }
+        });
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,12 @@
+{"hypothesisId": "A", "location": "debug_stages.py:30", "message": "Testing Hypothesis A: interviewStage.list needs interviewPlanId", "data": {}, "timestamp": 1765563997569, "sessionId": "debug-stages"}
+{"hypothesisId": "A", "location": "debug_stages.py:36", "message": "Test 1: Calling interviewStage.list with empty body", "data": {"body": {}}, "timestamp": 1765563997569, "sessionId": "debug-stages"}
+{"hypothesisId": "A", "location": "debug_stages.py:42", "message": "Test 1 response", "data": {"status_code": 200, "success": false, "error": "invalid_input"}, "timestamp": 1765563997782, "sessionId": "debug-stages"}
+{"hypothesisId": "A", "location": "debug_stages.py:51", "message": "Test 2: Fetching interview plans first", "data": {}, "timestamp": 1765563997782, "sessionId": "debug-stages"}
+{"hypothesisId": "A", "location": "debug_stages.py:57", "message": "interviewPlan.list response", "data": {"status_code": 200, "success": true, "plan_count": 41}, "timestamp": 1765563998003, "sessionId": "debug-stages"}
+{"hypothesisId": "A", "location": "debug_stages.py:70", "message": "First interview plan", "data": {"plan_id": "d5c7a8a4-0d13-4d57-8c2e-e4e7ac14cb49", "plan_title": "Sales Leader (SF/NY)"}, "timestamp": 1765563998004, "sessionId": "debug-stages"}
+{"hypothesisId": "A", "location": "debug_stages.py:78", "message": "Test 3: Calling interviewStage.list with interviewPlanId", "data": {"interviewPlanId": "d5c7a8a4-0d13-4d57-8c2e-e4e7ac14cb49"}, "timestamp": 1765563998004, "sessionId": "debug-stages"}
+{"hypothesisId": "A", "location": "debug_stages.py:84", "message": "Test 3 response with interviewPlanId", "data": {"status_code": 200, "success": true, "stage_count": 15, "error": null}, "timestamp": 1765563998176, "sessionId": "debug-stages"}
+{"hypothesisId": "A-fix", "location": "etl.py:get_interview_stages", "message": "Fetched interview plans", "data": {"plan_count": 41}, "timestamp": 1765564132059, "sessionId": "etl-fix"}
+{"hypothesisId": "A-fix", "location": "etl.py:get_interview_stages", "message": "Fetched all stages", "data": {"total_stages": 498, "unique_stages": 498}, "timestamp": 1765564140197, "sessionId": "etl-fix"}
+{"hypothesisId": "A-fix", "location": "etl.py:get_interview_stages", "message": "Fetched interview plans", "data": {"plan_count": 41}, "timestamp": 1765564264992, "sessionId": "etl-fix"}
+{"hypothesisId": "A-fix", "location": "etl.py:get_interview_stages", "message": "Fetched all stages", "data": {"total_stages": 498, "unique_stages": 498}, "timestamp": 1765564274804, "sessionId": "etl-fix"}

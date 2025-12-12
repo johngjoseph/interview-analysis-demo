@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>RecOps Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <nav class="bg-white border-b h-16 flex items-center justify-between px-8">
+        <a href="/dashboard" class="text-xl font-bold text-slate-800">RecOps <span class="text-blue-600">AI</span></a>
+        <div class="flex gap-4 text-sm">
+            <a href="/dashboard" class="text-gray-500 hover:text-blue-600">Dashboard</a>
+            <span class="font-bold text-blue-600">Settings</span>
+            <a href="/logout" class="text-red-500">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto mt-8 px-4">
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- CONFIGURATION -->
+            <div class="bg-white rounded-xl shadow p-6">
+                <h2 class="text-lg font-bold text-gray-800 mb-4">Target Companies</h2>
+                <form action="/settings/add" method="POST" class="mb-6 bg-gray-50 p-4 rounded border border-gray-200">
+                    <div class="space-y-3">
+                        <input type="text" name="name" placeholder="Company Name (e.g. OpenAI)" class="w-full border p-2 rounded text-sm" required>
+                        <input type="url" name="url" placeholder="Career Page URL" class="w-full border p-2 rounded text-sm" required>
+                        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 rounded text-sm hover:bg-blue-700">Add Target</button>
+                    </div>
+                </form>
+
+                <div class="space-y-2">
+                    {% for target in targets %}
+                    <div class="flex justify-between items-center p-3 border rounded hover:bg-gray-50 group">
+                        <div>
+                            <div class="font-bold text-sm">{{ target.name }}</div>
+                            <div class="text-xs text-gray-500 truncate w-48">{{ target.career_url }}</div>
+                        </div>
+                        <button hx-delete="/settings/delete/{{ target.id }}" hx-target="closest div" hx-swap="outerHTML" 
+                                class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                            Delete
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- SCRAPER LAB -->
+            <div class="bg-white rounded-xl shadow p-6">
+                <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                    Scraper Lab (Debug)
+                </h2>
+                <p class="text-xs text-gray-500 mb-4">Troubleshoot scraping issues by seeing exactly what the bot sees.</p>
+                
+                <form hx-post="/settings/debug" hx-target="#debug-results" hx-swap="innerHTML">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Test URL</label>
+                    <div class="flex gap-2">
+                        <input type="url" name="debug_url" placeholder="Paste URL to test..." class="flex-grow border p-2 rounded text-sm">
+                        <button type="submit" class="bg-purple-600 text-white px-4 rounded text-sm font-bold">Test</button>
+                    </div>
+                </form>
+
+                <div id="debug-results" class="mt-4"></div>
+            </div>
+        </div>
+
+        <!-- LINK TO TEST SCRAPER PAGE -->
+        <div class="mt-8 bg-white rounded-xl shadow p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Scraper Testing
+            </h2>
+            <p class="text-sm text-gray-600 mb-4">Run full workflow tests and validate scraping functionality.</p>
+            <a href="/test-scraper" class="inline-block bg-green-600 text-white font-bold py-2 px-6 rounded text-sm hover:bg-green-700">
+                Go to Scraper Test Page →
+            </a>
+        </div>
+    </main>
+</body>
+</html>
+
