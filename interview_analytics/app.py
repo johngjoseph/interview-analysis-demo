@@ -232,82 +232,113 @@ with tab1:
                 
                 dept_join = f"JOIN applications a ON h.application_id = a.id WHERE a.department = '{dept_filter}'" if dept_filter else ""
                 
-                # Count unique apps that reached each stage
+                # Count unique apps that reached each stage - consolidate onsite stages
                 funnel_query = f"""
                 SELECT 
-                    h.stage_name,
+                    CASE 
+                        WHEN h.stage_name IN ('Onsite', 'All Around', 'Work Trial') THEN 'Onsite'
+                        ELSE h.stage_name
+                    END as stage_name,
                     COUNT(DISTINCT h.application_id) as reached
                 FROM application_history h
                 {dept_join}
-                {'AND' if dept_filter else 'WHERE'} h.stage_name NOT IN ('Archived')
-                GROUP BY h.stage_name
+                {'AND' if dept_filter else 'WHERE'} h.stage_name NOT IN ('Archived', 'Jordan 1:1')
+                GROUP BY CASE 
+                    WHEN h.stage_name IN ('Onsite', 'All Around', 'Work Trial') THEN 'Onsite'
+                    ELSE h.stage_name
+                END
                 ORDER BY reached DESC
-                LIMIT 12
                 """
                 
                 funnel_df = conn.execute(funnel_query).df()
                 conn.close()
                 
                 if len(funnel_df) > 1:
-                    # Sort by typical funnel order
+                    # Define funnel order - ensures Onsite, Offer, Hired are included
                     stage_order = {
-                        'Application Review': 1, 'Reached Out': 2, 'Intro Call': 3,
-                        'New Lead': 0, 'Replied': 2.5, 'Coding 1': 4, 'Coding 2': 5,
-                        'Technical Interview 1': 5, 'Technical Deep Dive': 6,
-                        'Onsite': 7, 'All Around': 7, 'Work Trial': 7,
-                        'Offer': 8, 'Hired': 9
+                        'New Lead': 0, 'Application Review': 1, 'Reached Out': 2, 
+                        'Replied': 3, 'Intro Call': 4, 'Coding 1': 5, 
+                        'Hiring Manager Screen': 6, 'Technical Interview 1': 7,
+                        'Technical Interview 2': 8, 'Recruiter Screen': 9,
+                        'Technical Deep Dive': 10, 'Coding 2': 11,
+                        'Onsite': 12, 'All Around': 12, 'Work Trial': 12,
+                        'Offer': 13, 'Hired': 14
                     }
-                    funnel_df['order'] = funnel_df['stage_name'].map(lambda x: stage_order.get(x, 5))
+                    funnel_df['order'] = funnel_df['stage_name'].map(lambda x: stage_order.get(x, 99))
+                    
+                    # Keep only stages in our defined order (drops misc stages)
+                    funnel_df = funnel_df[funnel_df['order'] < 99]
                     funnel_df = funnel_df.sort_values('order')
                     
-                    stages = funnel_df['stage_name'].tolist()[:10]
-                    counts = funnel_df['reached'].tolist()[:10]
+                    # Key funnel stages to always show (simplified view)
+                    key_stages = ['New Lead', 'Application Review', 'Intro Call', 'Coding 1', 
+                                   'Onsite', 'Offer', 'Hired']
                     
-                    total_start = max(counts) if counts else 1
+                    # Filter to key stages that exist in data
+                    key_df = funnel_df[funnel_df['stage_name'].isin(key_stages)].copy()
+                    key_df = key_df.sort_values('order')
                     
-                    # Create Sankey
-                    source = []
-                    target = []
-                    values = []
-                    
-                    for i in range(len(stages) - 1):
-                        source.append(i)
-                        target.append(i + 1)
-                        values.append(counts[i + 1])
-                    
-                    node_labels = []
-                    for stage, count in zip(stages, counts):
-                        pct = (count / total_start) * 100 if total_start > 0 else 0
-                        node_labels.append(f"{stage}<br>{count:,} ({pct:.0f}%)")
-                    
-                    import plotly.graph_objects as go
-                    
-                    fig = go.Figure(data=[go.Sankey(
-                        node=dict(
-                            pad=15,
-                            thickness=20,
-                            line=dict(color="black", width=0.5),
-                            label=node_labels,
-                            color=["#3498db", "#2980b9", "#27ae60", "#2ecc71", "#f1c40f",
-                                   "#f39c12", "#e67e22", "#d35400", "#e74c3c", "#9b59b6"][:len(stages)],
-                            hovertemplate='%{label}<extra></extra>'
-                        ),
-                        link=dict(
-                            source=source,
-                            target=target,
-                            value=values,
-                            color="rgba(52, 152, 219, 0.3)",
-                            hovertemplate='%{source.label} → %{target.label}<br>Reached: %{value:,}<extra></extra>'
+                    if len(key_df) > 0:
+                        # Calculate metrics - use max as starting point for cumulative %
+                        max_stage_count = key_df['reached'].max()
+                        key_df['cumulative_pct'] = (key_df['reached'] / max_stage_count * 100).round(1)
+                        
+                        # Dropoff = how many dropped from previous stage
+                        key_df['dropoff'] = key_df['reached'].shift(1) - key_df['reached']
+                        key_df['dropoff'] = key_df['dropoff'].fillna(0).astype(int)
+                        
+                        # Stage Conv = % that made it TO the next stage (shift -1 to show next/current)
+                        key_df['stage_conversion'] = (key_df['reached'].shift(-1) / key_df['reached'] * 100).round(1)
+                        key_df['stage_conversion'] = key_df['stage_conversion'].fillna(0)  # Last row has no next
+                        
+                        # Create horizontal funnel bar chart
+                        import plotly.graph_objects as go
+                        
+                        fig = go.Figure()
+                        
+                        # Add horizontal bars
+                        fig.add_trace(go.Bar(
+                            y=key_df['stage_name'],
+                            x=key_df['reached'],
+                            orientation='h',
+                            marker=dict(
+                                color='#3498db',
+                                line=dict(color='#2980b9', width=1)
+                            ),
+                            text=[f"{c:,}" for c in key_df['reached']],
+                            textposition='inside',
+                            textfont=dict(color='white', size=14),
+                            hovertemplate='%{y}<br>Candidates: %{x:,}<extra></extra>'
+                        ))
+                        
+                        fig.update_layout(
+                            title_text="Candidates Who Reached Each Stage",
+                            xaxis_title="Number of Candidates",
+                            yaxis=dict(autorange="reversed"),  # Top to bottom
+                            height=400,
+                            showlegend=False,
+                            margin=dict(l=150, r=20, t=40, b=40)
                         )
-                    )])
-                    
-                    fig.update_layout(
-                        title_text="Candidates Who Reached Each Stage",
-                        font_size=11,
-                        height=450
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Show detailed table below
+                        st.markdown("**Funnel Metrics:**")
+                        display_df = key_df[['stage_name', 'reached', 'cumulative_pct', 'dropoff', 'stage_conversion']].copy()
+                        display_df.columns = ['Stage', 'Candidates', 'Cumulative %', 'Dropoff', 'Stage Conv %']
+                        st.dataframe(
+                            display_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                'Candidates': st.column_config.NumberColumn(format="%d"),
+                                'Cumulative %': st.column_config.NumberColumn(format="%.1f%%"),
+                                'Dropoff': st.column_config.NumberColumn(format="▼ %d"),
+                                'Stage Conv %': st.column_config.NumberColumn(format="%.1f%%")
+                            }
+                        )
+                    else:
+                        st.info("No funnel data available")
                 else:
                     st.info("Not enough stage data for Sankey diagram")
             else:
@@ -331,12 +362,6 @@ with tab1:
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No stage data available")
-        
-        with col2:
-            st.subheader("Conversion Rates")
-            if funnel_data['conversion_rates']:
-                rates_df = pd.DataFrame(funnel_data['conversion_rates'])
-                st.dataframe(rates_df, use_container_width=True, hide_index=True)
         
         # Onsite → Offer Dropoff Analysis (using application_history for accuracy)
         st.markdown("---")
@@ -473,8 +498,8 @@ with tab1:
                 avg_interviewers as "Avg",
                 median_interviewers as "Median"
             FROM stage_stats
-            ORDER BY candidates DESC
             where stage_name not in ('Jordan 1:1','Archived','Application Review', 'Reached Out', 'Intro Call', 'New Lead', 'Replied')
+            ORDER BY candidates DESC
             """
             
             interviewer_stats = conn.execute(interviewer_stats_query).df()

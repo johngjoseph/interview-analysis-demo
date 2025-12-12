@@ -64,12 +64,13 @@ def main():
         print("Updating database...")
         conn = duckdb.connect(str(DB_PATH))
         
+        # Just update candidate_name, skip candidate_id since it has type mismatch
         for name, cand_id, app_id in updates:
             conn.execute("""
                 UPDATE applications 
-                SET candidate_name = ?, candidate_id = ?
+                SET candidate_name = ?
                 WHERE id = ?
-            """, [name, cand_id, app_id])
+            """, [name, app_id])
         
         conn.commit()
         conn.close()

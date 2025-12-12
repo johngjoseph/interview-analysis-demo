@@ -1,14 +1,14 @@
 # Interview Analytics Approach
 
 ## Objective
-Optimizing the onsite pass through rate:  Support headgrowth aligned with optimized use of hiring resources
+Optimizing the onsite pass through rate:  Support headgrowth aligned with optimized use of hiring resources in service of a predictable, calibrated, discerning, and fair interview process.
 
 ## Context
-The onsite interview is an important part of the culture and provides a reliable signal for the best talent. The in-office project nature of the interview is also resource intensive, and, as implelented, somewhat subjective.  There is some anecdotal evidence that the onsite is allowing Cursor to pass on great candidates, and may, as hiring increases, cause some confusion on what type of candidates
+The onsite interview is an important part of the culture and provides a reliable signal for the best talent. The in-office project nature of the interview is also resource intensive, and, as implelented, somewhat subjective.  There is some anecdotal evidence that the outcomes for the interview are unpredicable, which could have adverse impacts like passing on great candidates, inefficiencies in candidate sourcing/screening, and reluctance to refer close contacts to the interview process.
 
-Here we are going to propose a stuctured approach to evaluating our onsite interview.
+Here we are going to propose a stuctured approach to evaluating our onsite interview
 
-If we're successful in this anlaysis we would expect to see increase in the number of candidates that pass from onsite to offer.
+If we're successful in this anlaysis we would expect to see increase in the number of candidates that pass from onsite to offer and in increase of a (yet to be defined) quality or return on hire.
 
 ## Key Questions We're Answering
 We're proposing 5 quesitons to answer to help form a somewhat robust anwer to the question "What can we do to optimize onsites (mostluy for Engineering, but hopefully applicable to other parts of Cursor)
